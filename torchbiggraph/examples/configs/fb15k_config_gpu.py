@@ -25,7 +25,7 @@ def get_torchbiggraph_config():
                 "name": "all_edges",
                 "lhs": "all",
                 "rhs": "all",
-                "operator": "translation", # affine(X), diagonal(O), translation, linear, complex_diagonal(O)
+                "operator": "linear", # affine(X), diagonal(O), translation(O), linear(), complex_diagonal(O)
             }
         ],
         dynamic_relations=True,
