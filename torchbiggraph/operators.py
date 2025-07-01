@@ -305,7 +305,6 @@ class AffineDynamicOperator(AbstractDynamicOperator):
     ) -> FloatTensorType:
         match_shape(embeddings, ..., self.dim)
         match_shape(operator_idxs, *embeddings.size()[:-1])
-        # We add a dimension so that matmul performs a matrix-vector product.
         operator_idxs = operator_idxs.to(embeddings.device)
         return (
             torch.matmul(
@@ -315,7 +314,14 @@ class AffineDynamicOperator(AbstractDynamicOperator):
             + self.translations.to(device=embeddings.device)[operator_idxs]
         )
 
-    # FIXME This adapts from the pre-D14024710 format; remove eventually.
+    def get_operator_params_for_reg(
+        self, operator_idxs: LongTensorType
+    ) -> Optional[FloatTensorType]:
+        operator_idxs = operator_idxs.to(self.linear_transformations.device)
+        lin_norm = self.linear_transformations[operator_idxs].norm(dim=(-2, -1))
+        trans_norm = self.translations[operator_idxs].norm(dim=-1)
+        return lin_norm + trans_norm
+
     def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
         param_key = "%slinear_transformations" % prefix
         old_param_key = "%srotations" % prefix
@@ -324,7 +330,6 @@ class AffineDynamicOperator(AbstractDynamicOperator):
                 state_dict.pop(old_param_key).transpose(-1, -2).contiguous()
             )
         super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
-
 
 # @DYNAMIC_OPERATORS.register_as("complex_diagonal")
 # class ComplexDiagonalDynamicOperator(AbstractDynamicOperator):
