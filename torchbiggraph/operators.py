@@ -194,13 +194,21 @@ class DiagonalDynamicOperator(AbstractDynamicOperator):
         super().__init__(dim, num_operations)
         self.diagonals = nn.Parameter(torch.ones((num_operations, dim)))
 
-    def forward(self, embeddings, operator_idxs):
+    def forward(self, embeddings: FloatTensorType, operator_idxs: LongTensorType) -> FloatTensorType:
         match_shape(embeddings, ..., self.dim)
         match_shape(operator_idxs, *embeddings.size()[:-1])
-        return self.diagonals.to(embeddings.device)[operator_idxs] * embeddings
 
-    def get_operator_params_for_reg(self, operator_idxs):
+        device = embeddings.device
+        operator_idxs = operator_idxs.to(device)
+        diag = self.diagonals.to(device)[operator_idxs]  # (N, dim)
+        return diag * embeddings
+
+    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+        operator_idxs = operator_idxs.to(self.diagonals.device)
         return self.diagonals[operator_idxs].abs()
+
+    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+        return embs.abs()
 
 
 @DYNAMIC_OPERATORS.register_as("translation")
@@ -209,28 +217,46 @@ class TranslationDynamicOperator(AbstractDynamicOperator):
         super().__init__(dim, num_operations)
         self.translations = nn.Parameter(torch.zeros((num_operations, dim)))
 
-    def forward(self, embeddings, operator_idxs):
+    def forward(self, embeddings: FloatTensorType, operator_idxs: LongTensorType) -> FloatTensorType:
         match_shape(embeddings, ..., self.dim)
         match_shape(operator_idxs, *embeddings.size()[:-1])
-        return embeddings + self.translations.to(embeddings.device)[operator_idxs]
 
-    def get_operator_params_for_reg(self, operator_idxs):
+        device = embeddings.device
+        operator_idxs = operator_idxs.to(device)
+        trans = self.translations.to(device)[operator_idxs]  # (N, dim)
+        return embeddings + trans
+
+    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+        operator_idxs = operator_idxs.to(self.translations.device)
         return self.translations[operator_idxs].abs()
+
+    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+        return embs.abs()
 
 
 @DYNAMIC_OPERATORS.register_as("linear")
 class LinearDynamicOperator(AbstractDynamicOperator):
     def __init__(self, dim: int, num_operations: int):
         super().__init__(dim, num_operations)
-        self.linears = nn.Parameter(torch.eye(dim).repeat(num_operations, 1, 1))
+        self.linears = nn.Parameter(torch.eye(dim).repeat(num_operations, 1, 1))  # (num_ops, dim, dim)
 
-    def forward(self, embeddings, operator_idxs):
+    def forward(self, embeddings: FloatTensorType, operator_idxs: LongTensorType) -> FloatTensorType:
         match_shape(embeddings, ..., self.dim)
         match_shape(operator_idxs, *embeddings.size()[:-1])
-        emb_exp = embeddings.unsqueeze(-1)
-        return torch.matmul(
-            self.linears.to(embeddings.device)[operator_idxs], emb_exp
-        ).squeeze(-1)
+
+        device = embeddings.device
+        operator_idxs = operator_idxs.to(device)
+        linears = self.linears.to(device)[operator_idxs]  # (N, dim, dim)
+        emb_exp = embeddings.unsqueeze(-1)                # (N, dim, 1)
+        return torch.matmul(linears, emb_exp).squeeze(-1) # (N, dim)
+
+    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+        operator_idxs = operator_idxs.to(self.linears.device)
+        selected_linears = self.linears[operator_idxs]  # (N, dim, dim)
+        return torch.norm(selected_linears.view(selected_linears.size(0), -1), dim=1)  # Frobenius norm
+
+    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+        return embs.abs()
 
 
 @DYNAMIC_OPERATORS.register_as("affine")
@@ -240,14 +266,30 @@ class AffineDynamicOperator(AbstractDynamicOperator):
         self.linears = nn.Parameter(torch.eye(dim).repeat(num_operations, 1, 1))
         self.translations = nn.Parameter(torch.zeros((num_operations, dim)))
 
-    def forward(self, embeddings, operator_idxs):
+    def forward(self, embeddings: FloatTensorType, operator_idxs: LongTensorType) -> FloatTensorType:
         match_shape(embeddings, ..., self.dim)
         match_shape(operator_idxs, *embeddings.size()[:-1])
-        emb_exp = embeddings.unsqueeze(-1)
-        output = torch.matmul(
-            self.linears.to(embeddings.device)[operator_idxs], emb_exp
-        ).squeeze(-1)
-        return output + self.translations.to(embeddings.device)[operator_idxs]
+
+        device = embeddings.device
+        operator_idxs = operator_idxs.to(device)
+        linears = self.linears.to(device)[operator_idxs]               # (N, dim, dim)
+        translations = self.translations.to(device)[operator_idxs]     # (N, dim)
+
+        emb_exp = embeddings.unsqueeze(-1)                             # (N, dim, 1)
+        transformed = torch.matmul(linears, emb_exp).squeeze(-1)       # (N, dim)
+        return transformed + translations
+
+    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+        operator_idxs = operator_idxs.to(self.linears.device)
+        linear_params = self.linears[operator_idxs]                    # (N, dim, dim)
+        translation_params = self.translations[operator_idxs]          # (N, dim)
+
+        linear_norm = torch.norm(linear_params.view(linear_params.size(0), -1), dim=1)  # Frobenius norm
+        translation_norm = torch.norm(translation_params, dim=1)
+        return linear_norm + translation_norm
+
+    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+        return embs.abs()
 
 
 # @DYNAMIC_OPERATORS.register_as("complex_diagonal")
