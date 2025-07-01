@@ -250,68 +250,68 @@ class AffineDynamicOperator(AbstractDynamicOperator):
         return output + self.translations.to(embeddings.device)[operator_idxs]
 
 
-@DYNAMIC_OPERATORS.register_as("complex_diagonal")
-class ComplexDiagonalDynamicOperator(AbstractDynamicOperator):
-    def __init__(self, dim: int, num_operations: int):
-        super().__init__(dim, num_operations)
-        if dim % 2 != 0:
-            raise ValueError("Even dimension required.")
-        self.real = nn.Parameter(torch.ones((num_operations, dim // 2)))
-        self.imag = nn.Parameter(torch.zeros((num_operations, dim // 2)))
-
-    def forward(self, embeddings, operator_idxs):
-        match_shape(embeddings, ..., self.dim)
-        match_shape(operator_idxs, *embeddings.size()[:-1])
-        real_a = embeddings[..., : self.dim // 2]
-        imag_a = embeddings[..., self.dim // 2:]
-        real_b = self.real.to(embeddings.device)[operator_idxs]
-        imag_b = self.imag.to(embeddings.device)[operator_idxs]
-        prod = torch.empty_like(embeddings)
-        prod[..., : self.dim // 2] = real_a * real_b - imag_a * imag_b
-        prod[..., self.dim // 2:] = real_a * imag_b + imag_a * real_b
-        return prod
-
-    def get_operator_params_for_reg(self, operator_idxs):
-        return torch.sqrt(self.real[operator_idxs] ** 2 + self.imag[operator_idxs] ** 2)
-
-    def prepare_embs_for_reg(self, embs):
-        real, imag = embs[..., : self.dim // 2], embs[..., self.dim // 2:]
-        return torch.sqrt(real ** 2 + imag ** 2)
-
 # @DYNAMIC_OPERATORS.register_as("complex_diagonal")
 # class ComplexDiagonalDynamicOperator(AbstractDynamicOperator):
 #     def __init__(self, dim: int, num_operations: int):
 #         super().__init__(dim, num_operations)
 #         if dim % 2 != 0:
-#             raise ValueError(
-#                 "Need even dimension as 1st half is real "
-#                 "and 2nd half is imaginary coordinates"
-#             )
+#             raise ValueError("Even dimension required.")
 #         self.real = nn.Parameter(torch.ones((num_operations, dim // 2)))
 #         self.imag = nn.Parameter(torch.zeros((num_operations, dim // 2)))
 
-#     def forward(
-#         self, embeddings: FloatTensorType, operator_idxs: LongTensorType
-#     ) -> FloatTensorType:
+#     def forward(self, embeddings, operator_idxs):
 #         match_shape(embeddings, ..., self.dim)
 #         match_shape(operator_idxs, *embeddings.size()[:-1])
 #         real_a = embeddings[..., : self.dim // 2]
-#         imag_a = embeddings[..., self.dim // 2 :]
+#         imag_a = embeddings[..., self.dim // 2:]
 #         real_b = self.real.to(embeddings.device)[operator_idxs]
 #         imag_b = self.imag.to(embeddings.device)[operator_idxs]
 #         prod = torch.empty_like(embeddings)
 #         prod[..., : self.dim // 2] = real_a * real_b - imag_a * imag_b
-#         prod[..., self.dim // 2 :] = real_a * imag_b + imag_a * real_b
+#         prod[..., self.dim // 2:] = real_a * imag_b + imag_a * real_b
 #         return prod
 
-#     def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
-#         operator_idxs = operator_idxs.to(self.real.device)
+#     def get_operator_params_for_reg(self, operator_idxs):
 #         return torch.sqrt(self.real[operator_idxs] ** 2 + self.imag[operator_idxs] ** 2)
 
-#     def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
-#         assert embs.shape[-1] == self.dim
-#         real, imag = embs[..., : self.dim // 2], embs[..., self.dim // 2 :]
+#     def prepare_embs_for_reg(self, embs):
+#         real, imag = embs[..., : self.dim // 2], embs[..., self.dim // 2:]
 #         return torch.sqrt(real ** 2 + imag ** 2)
+
+@DYNAMIC_OPERATORS.register_as("complex_diagonal")
+class ComplexDiagonalDynamicOperator(AbstractDynamicOperator):
+    def __init__(self, dim: int, num_operations: int):
+        super().__init__(dim, num_operations)
+        if dim % 2 != 0:
+            raise ValueError(
+                "Need even dimension as 1st half is real "
+                "and 2nd half is imaginary coordinates"
+            )
+        self.real = nn.Parameter(torch.ones((num_operations, dim // 2)))
+        self.imag = nn.Parameter(torch.zeros((num_operations, dim // 2)))
+
+    def forward(
+        self, embeddings: FloatTensorType, operator_idxs: LongTensorType
+    ) -> FloatTensorType:
+        match_shape(embeddings, ..., self.dim)
+        match_shape(operator_idxs, *embeddings.size()[:-1])
+        real_a = embeddings[..., : self.dim // 2]
+        imag_a = embeddings[..., self.dim // 2 :]
+        real_b = self.real.to(embeddings.device)[operator_idxs]
+        imag_b = self.imag.to(embeddings.device)[operator_idxs]
+        prod = torch.empty_like(embeddings)
+        prod[..., : self.dim // 2] = real_a * real_b - imag_a * imag_b
+        prod[..., self.dim // 2 :] = real_a * imag_b + imag_a * real_b
+        return prod
+
+    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+        operator_idxs = operator_idxs.to(self.real.device)
+        return torch.sqrt(self.real[operator_idxs] ** 2 + self.imag[operator_idxs] ** 2)
+
+    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+        assert embs.shape[-1] == self.dim
+        real, imag = embs[..., : self.dim // 2], embs[..., self.dim // 2 :]
+        return torch.sqrt(real ** 2 + imag ** 2)
 
 def instantiate_operator(
     operator: str, side: Side, num_dynamic_rels: int, dim: int
