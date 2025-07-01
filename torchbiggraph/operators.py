@@ -259,37 +259,71 @@ class LinearDynamicOperator(AbstractDynamicOperator):
         return embs.abs()
 
 
+# @DYNAMIC_OPERATORS.register_as("affine")
+# class AffineDynamicOperator(AbstractDynamicOperator):
+#     def __init__(self, dim: int, num_operations: int):
+#         super().__init__(dim, num_operations)
+#         self.linears = nn.Parameter(torch.eye(dim).repeat(num_operations, 1, 1))
+#         self.translations = nn.Parameter(torch.zeros((num_operations, dim)))
+
+#     def forward(self, embeddings: FloatTensorType, operator_idxs: LongTensorType) -> FloatTensorType:
+#         match_shape(embeddings, ..., self.dim)
+#         match_shape(operator_idxs, *embeddings.size()[:-1])
+
+#         device = embeddings.device
+#         operator_idxs = operator_idxs.to(device)
+#         linears = self.linears.to(device)[operator_idxs]               # (N, dim, dim)
+#         translations = self.translations.to(device)[operator_idxs]     # (N, dim)
+
+#         emb_exp = embeddings.unsqueeze(-1)                             # (N, dim, 1)
+#         transformed = torch.matmul(linears, emb_exp).squeeze(-1)       # (N, dim)
+#         return transformed + translations
+
+#     def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+#         operator_idxs = operator_idxs.to(self.linears.device)
+#         linear_params = self.linears[operator_idxs]                    # (N, dim, dim)
+#         translation_params = self.translations[operator_idxs]          # (N, dim)
+
+#         linear_norm = torch.norm(linear_params.view(linear_params.size(0), -1), dim=1)  # Frobenius norm
+#         translation_norm = torch.norm(translation_params, dim=1)
+#         return linear_norm + translation_norm
+
+#     def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+#         return embs.abs()
+
 @DYNAMIC_OPERATORS.register_as("affine")
 class AffineDynamicOperator(AbstractDynamicOperator):
     def __init__(self, dim: int, num_operations: int):
         super().__init__(dim, num_operations)
-        self.linears = nn.Parameter(torch.eye(dim).repeat(num_operations, 1, 1))
-        self.translations = nn.Parameter(torch.zeros((num_operations, dim)))
+        self.linear_transformations = nn.Parameter(
+            torch.diag_embed(torch.ones(()).expand(num_operations, dim))
+        )
+        self.translations = nn.Parameter(torch.zeros((self.num_operations, self.dim)))
 
-    def forward(self, embeddings: FloatTensorType, operator_idxs: LongTensorType) -> FloatTensorType:
+    def forward(
+        self, embeddings: FloatTensorType, operator_idxs: LongTensorType
+    ) -> FloatTensorType:
         match_shape(embeddings, ..., self.dim)
         match_shape(operator_idxs, *embeddings.size()[:-1])
+        # We add a dimension so that matmul performs a matrix-vector product.
+        operator_idxs = operator_idxs.to(embeddings.device)
+        return (
+            torch.matmul(
+                self.linear_transformations.to(device=embeddings.device)[operator_idxs],
+                embeddings.unsqueeze(-1),
+            ).squeeze(-1)
+            + self.translations.to(device=embeddings.device)[operator_idxs]
+        )
 
-        device = embeddings.device
-        operator_idxs = operator_idxs.to(device)
-        linears = self.linears.to(device)[operator_idxs]               # (N, dim, dim)
-        translations = self.translations.to(device)[operator_idxs]     # (N, dim)
-
-        emb_exp = embeddings.unsqueeze(-1)                             # (N, dim, 1)
-        transformed = torch.matmul(linears, emb_exp).squeeze(-1)       # (N, dim)
-        return transformed + translations
-
-    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
-        operator_idxs = operator_idxs.to(self.linears.device)
-        linear_params = self.linears[operator_idxs]                    # (N, dim, dim)
-        translation_params = self.translations[operator_idxs]          # (N, dim)
-
-        linear_norm = torch.norm(linear_params.view(linear_params.size(0), -1), dim=1)  # Frobenius norm
-        translation_norm = torch.norm(translation_params, dim=1)
-        return linear_norm + translation_norm
-
-    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
-        return embs.abs()
+    # FIXME This adapts from the pre-D14024710 format; remove eventually.
+    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+        param_key = "%slinear_transformations" % prefix
+        old_param_key = "%srotations" % prefix
+        if old_param_key in state_dict:
+            state_dict[param_key] = (
+                state_dict.pop(old_param_key).transpose(-1, -2).contiguous()
+            )
+        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
 
 # @DYNAMIC_OPERATORS.register_as("complex_diagonal")
