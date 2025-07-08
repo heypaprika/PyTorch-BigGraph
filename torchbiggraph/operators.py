@@ -250,13 +250,13 @@ class LinearDynamicOperator(AbstractDynamicOperator):
         emb_exp = embeddings.unsqueeze(-1)                # (N, dim, 1)
         return torch.matmul(linears, emb_exp).squeeze(-1) # (N, dim)
 
-    def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
-        operator_idxs = operator_idxs.to(self.linears.device)
-        selected_linears = self.linears[operator_idxs]  # (N, dim, dim)
-        return torch.norm(selected_linears.view(selected_linears.size(0), -1), dim=1)  # Frobenius norm
+    # def get_operator_params_for_reg(self, operator_idxs: LongTensorType) -> Optional[FloatTensorType]:
+    #     operator_idxs = operator_idxs.to(self.linears.device)
+    #     selected_linears = self.linears[operator_idxs]  # (N, dim, dim)
+    #     return torch.norm(selected_linears.view(selected_linears.size(0), -1), dim=1)  # Frobenius norm
 
-    def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
-        return embs.abs()
+    # def prepare_embs_for_reg(self, embs: FloatTensorType) -> FloatTensorType:
+    #     return embs.abs()
 
 
 # @DYNAMIC_OPERATORS.register_as("affine")
@@ -308,28 +308,28 @@ class AffineDynamicOperator(AbstractDynamicOperator):
         operator_idxs = operator_idxs.to(embeddings.device)
         return (
             torch.matmul(
-                self.linear_transformations.to(device=embeddings.device)[operator_idxs],
+                self.linear_transformations.to(embeddings.device)[operator_idxs],
                 embeddings.unsqueeze(-1),
             ).squeeze(-1)
-            + self.translations.to(device=embeddings.device)[operator_idxs]
+            + self.translations.to(embeddings.device)[operator_idxs]
         )
 
-    def get_operator_params_for_reg(
-        self, operator_idxs: LongTensorType
-    ) -> Optional[FloatTensorType]:
-        operator_idxs = operator_idxs.to(self.linear_transformations.device)
-        lin_norm = self.linear_transformations[operator_idxs].norm(dim=(-2, -1))
-        trans_norm = self.translations[operator_idxs].norm(dim=-1)
-        return lin_norm + trans_norm
+    # def get_operator_params_for_reg(
+    #     self, operator_idxs: LongTensorType
+    # ) -> Optional[FloatTensorType]:
+    #     operator_idxs = operator_idxs.to(self.linear_transformations.device)
+    #     lin_norm = self.linear_transformations[operator_idxs].norm(dim=(-2, -1))
+    #     trans_norm = self.translations[operator_idxs].norm(dim=-1)
+    #     return lin_norm + trans_norm
 
-    def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
-        param_key = "%slinear_transformations" % prefix
-        old_param_key = "%srotations" % prefix
-        if old_param_key in state_dict:
-            state_dict[param_key] = (
-                state_dict.pop(old_param_key).transpose(-1, -2).contiguous()
-            )
-        super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
+    # def _load_from_state_dict(self, state_dict, prefix, *args, **kwargs):
+    #     param_key = "%slinear_transformations" % prefix
+    #     old_param_key = "%srotations" % prefix
+    #     if old_param_key in state_dict:
+    #         state_dict[param_key] = (
+    #             state_dict.pop(old_param_key).transpose(-1, -2).contiguous()
+    #         )
+    #     super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
 # @DYNAMIC_OPERATORS.register_as("complex_diagonal")
 # class ComplexDiagonalDynamicOperator(AbstractDynamicOperator):
