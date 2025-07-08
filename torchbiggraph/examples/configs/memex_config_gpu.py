@@ -11,13 +11,13 @@ def get_torchbiggraph_config():
 
     config = dict(  # noqa
         # I/O data
-        entity_path="data/memex/latest",
+        entity_path="data/memex/latest_processing",
         edge_paths=[
-            "data/memex/latest/edge-train_partitioned",
-            "data/memex/latest/edge-valid_partitioned",
-            "data/memex/latest/edge-test_partitioned",
+            "data/memex/latest_processing/edge-train_partitioned",
+            "data/memex/latest_processing/edge-valid_partitioned",
+            "data/memex/latest_processing/edge-test_partitioned",
         ],
-        checkpoint_path="model/memex",
+        checkpoint_path="model/memex/letest_processing",
         # Graph structure
         entities = {
             "user": {"num_partitions": 1},
