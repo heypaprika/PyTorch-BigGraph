@@ -49,7 +49,7 @@ def get_torchbiggraph_config():
         # Evaluation during training
         eval_fraction=0,  # to reproduce results, we need to use all training data
         workers=2,
-        gpus=1
+        num_gpus=1
     )
 
     return config
