@@ -14,8 +14,10 @@ from torch.utils import cpp_extension
 
 if __name__ == "__main__":
     if int(os.getenv("PBG_INSTALL_CPP", 0)) == 0:
+        print("📦 Installing Python-only version")
         setup()
     else:
+        print("🔧 Installing with C++ extension")
         setup(
             ext_modules=[
                 cpp_extension.CppExtension(
@@ -24,3 +26,4 @@ if __name__ == "__main__":
             ],
             cmdclass={"build_ext": cpp_extension.BuildExtension},
         )
+    

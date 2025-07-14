@@ -1,0 +1,43 @@
+# python files and directories
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# python build
+*.egg-info/
+build/
+dist/
+
+# Git files
+.git/
+.gitignore
+
+# Mac/Linux system files
+.DS_Store
+Thumbs.db
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+
+# environment files
+.env
+*.log
+*.bak
+
+# Jupyter notebooks (optional)
+*.ipynb
+
+# data files
+data/
+!data/README.md
+
+# etc files
+sagemaker_train.py
+credential
+
+torchbiggraph.egg-info/
+torchbiggraph/_C.cpython-312-darwin.so
