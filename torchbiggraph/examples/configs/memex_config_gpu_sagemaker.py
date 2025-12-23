@@ -48,7 +48,7 @@ def get_torchbiggraph_config():
         regularization_coef=1e-3,
         # Evaluation during training
         eval_fraction=0,  # to reproduce results, we need to use all training data
-        workers=2,
+        workers=1,
         num_gpus=1
     )
 

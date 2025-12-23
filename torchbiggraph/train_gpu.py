@@ -437,10 +437,14 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         self.shared_lhs = allocate_shared_tensor((max_edges,), dtype=torch.long)
         self.shared_rhs = allocate_shared_tensor((max_edges,), dtype=torch.long)
         self.shared_rel = allocate_shared_tensor((max_edges,), dtype=torch.long)
+        self.shared_lhs.share_memory_()
+        self.shared_rhs.share_memory_()
+        self.shared_rel.share_memory_()
 
         # fork early for HOGWILD threads
         logger.info("Creating GPU workers...")
         torch.set_num_threads(1)
+        
         self.gpu_pool = GPUProcessPool(
             config.num_gpus,
             subprocess_init,
