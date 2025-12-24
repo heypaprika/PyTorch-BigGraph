@@ -127,12 +127,12 @@ class GPUProcess(mp.get_context("spawn").Process):
             self.subprocess_init()
         self.master_endpoint.close()
 
-        for s in self.embedding_storage_freelist:
-            assert s.is_shared()
-            cudart = torch.cuda.cudart()
-            res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
-            torch.cuda.check_error(res)
-            assert s.is_pinned()
+        # for s in self.embedding_storage_freelist:
+            # assert s.is_shared()
+            # cudart = torch.cuda.cudart()
+            # res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
+            # torch.cuda.check_error(res)
+            # assert s.is_pinned()
         logger.info(f"GPU subprocess {self.gpu_idx} up and running")
         while True:
             try:
