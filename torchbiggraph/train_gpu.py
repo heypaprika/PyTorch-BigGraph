@@ -415,6 +415,14 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                 logger.exception("GPU mode: failed to close CPU pool cleanly")
             finally:
                 self.pool = None
+        if os.environ.get("TBG_DISABLE_CHECKPOINT_READ", "0") in ("1", "true", "True"):
+            logger.warning("GPU mode: disabling checkpoint reads (forcing fresh init)")
+            # Strict=False ensures maybe_read path can fall back to init if read fails.
+            self.strict = False
+            # Prevent loading from init_path as well (optional).
+            self.loadpath_manager = None
+
+
         assert config.num_gpus > 0
         if not CPP_INSTALLED:
             raise RuntimeError(
