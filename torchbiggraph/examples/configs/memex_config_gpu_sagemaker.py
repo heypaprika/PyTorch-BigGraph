@@ -17,7 +17,7 @@ def get_torchbiggraph_config():
             "/opt/ml/input/data/train/edge-valid_partitioned",
             "/opt/ml/input/data/train/edge-test_partitioned",
         ],
-        checkpoint_path="/opt/ml/model/",
+        # checkpoint_path="/opt/ml/model/",
         # Graph structure
         entities = {
             "user": {"num_partitions": 1},

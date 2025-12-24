@@ -17,7 +17,7 @@ def get_torchbiggraph_config():
             "data/memex/latest_processing/edge-valid_partitioned",
             "data/memex/latest_processing/edge-test_partitioned",
         ],
-        checkpoint_path="model/memex/letest_processing",
+        checkpoint_path="model/memex/latest_processing",
         # Graph structure
         entities = {
             "user": {"num_partitions": 1},
