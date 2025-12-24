@@ -406,6 +406,15 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             config, model, trainer, evaluator, rank, subprocess_init, stats_handler
         )
 
+        if hasattr(self, "pool") and self.pool is not None:
+            try:
+                logger.warning("GPU mode: closing CPU Hogwild mp pool")
+                self.pool.close()
+                self.pool.join()
+            except Exception:
+                logger.exception("GPU mode: failed to close CPU pool cleanly")
+            finally:
+                self.pool = None
         assert config.num_gpus > 0
         if not CPP_INSTALLED:
             raise RuntimeError(
