@@ -444,17 +444,20 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         # fork early for HOGWILD threads
         logger.info("Creating GPU workers...")
         torch.set_num_threads(1)
-        
-        self.gpu_pool = GPUProcessPool(
-            config.num_gpus,
-            subprocess_init,
-            {s for ss in self.embedding_storage_freelist.values() for s in ss}
-            | {
-                self.shared_lhs.storage(),
-                self.shared_rhs.storage(),
-                self.shared_rel.storage(),
-            },
-        )
+        if config.num_gpus == 1:
+            logger.info("Single GPU detected: running without GPUProcessPool")
+            self.gpu_pool = None
+        else:
+            self.gpu_pool = GPUProcessPool(
+                config.num_gpus,
+                subprocess_init,
+                {s for ss in self.embedding_storage_freelist.values() for s in ss}
+                | {
+                    self.shared_lhs.storage(),
+                    self.shared_rhs.storage(),
+                    self.shared_rel.storage(),
+                },
+            )
 
     # override
     def _coordinate_train(self, edges, eval_edge_idxs, epoch_idx) -> Stats:
