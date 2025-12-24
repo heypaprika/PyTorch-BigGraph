@@ -10,7 +10,6 @@ import time
 
 def get_torchbiggraph_config():
 
-    run_id = os.environ.get("RUN_ID", str(int(time.time())))
     config = dict(  # noqa
 
         # I/O data
@@ -21,8 +20,7 @@ def get_torchbiggraph_config():
             "/opt/ml/input/data/train/edge-test_partitioned",
         ],
         # checkpoint_path="/opt/ml/model/",
-        checkpoint_path=f"/opt/ml/checkpoints/memex/{run_id}",
-
+        checkpoint_path = f"/opt/ml/model/checkpoints/{os.environ.get('TBG_RUN_ID','run')}",
         # Graph structure
         entities = {
             "user": {"num_partitions": 1},
