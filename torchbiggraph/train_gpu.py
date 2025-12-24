@@ -441,12 +441,32 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         self.shared_rhs.share_memory_()
         self.shared_rel.share_memory_()
 
-        # fork early for HOGWILD threads
         logger.info("Creating GPU workers...")
         torch.set_num_threads(1)
+
+        self._single_gpu_worker = None
+        self.gpu_pool = None
+
         if config.num_gpus == 1:
-            logger.info("Single GPU detected: running without GPUProcessPool")
-            self.gpu_pool = None
+            logger.info("Single GPU: running without GPUProcessPool")
+            # 프로세스를 시작하지 않는 GPUProcess 인스턴스 생성
+            self._single_gpu_worker = GPUProcess(
+                gpu_idx=0,
+                subprocess_init=subprocess_init,
+                embedding_storage_freelist={s for ss in self.embedding_storage_freelist.values() for s in ss}
+                | {self.shared_lhs.storage(), self.shared_rhs.storage(), self.shared_rel.storage()},
+            )
+            # 중요: run() 대신 현재 프로세스에서 필요한 초기화만 수행
+            torch.cuda.set_device(torch.device("cuda", 0))
+            if subprocess_init is not None:
+                subprocess_init()
+
+            # 아래 pinned 등록은 subprocess에서 하던 작업인데, single process에서도 필요할 수 있음
+            for s in self._single_gpu_worker.embedding_storage_freelist:
+                assert s.is_shared()
+                cudart = torch.cuda.cudart()
+                res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
+                torch.cuda.check_error(res)
         else:
             self.gpu_pool = GPUProcessPool(
                 config.num_gpus,
