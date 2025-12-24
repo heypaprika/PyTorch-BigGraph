@@ -5,11 +5,14 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE.txt file in the root directory of this source tree.
-
+import os
+import time
 
 def get_torchbiggraph_config():
 
+    run_id = os.environ.get("RUN_ID", str(int(time.time())))
     config = dict(  # noqa
+
         # I/O data
         entity_path="/opt/ml/input/data/train",
         edge_paths=[
@@ -18,6 +21,8 @@ def get_torchbiggraph_config():
             "/opt/ml/input/data/train/edge-test_partitioned",
         ],
         # checkpoint_path="/opt/ml/model/",
+        checkpoint_path=f"/opt/ml/checkpoints/memex/{run_id}",
+
         # Graph structure
         entities = {
             "user": {"num_partitions": 1},
