@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-REGION=ap-northeast-1 
-REPO_NAME=pbg-sagemaker
+REGION=ap-southeast-1 
+REPO_NAME=memex-sagemaker
 IMAGE_TAG=latest
 
 # ECR repo create if not exists
