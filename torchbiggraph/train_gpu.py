@@ -615,7 +615,17 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                 split_almost_equally(num_entities, num_parts=num_subparts)
             ):
                 subpart_slices[entity_name, part, subpart] = subpart_slice
-
+        import subprocess
+        bucket_logger.warning(
+            f"[DBG] edges_lhs={edges_lhs.shape} {edges_lhs.dtype} pinned={edges_lhs.is_pinned()} "
+            f"edges_rhs={edges_rhs.shape} pinned={edges_rhs.is_pinned()} "
+            f"edges_rel={edges_rel.shape} pinned={edges_rel.is_pinned()} "
+            f"num_subparts={num_subparts}"
+        )
+        bucket_logger.warning(
+            f"[DBG] shared_lhs={self.shared_lhs.shape} shared_rhs={self.shared_rhs.shape} shared_rel={self.shared_rel.shape}"
+        )
+        subprocess.run(["bash","-lc","df -h /dev/shm"], check=False)
         subbuckets = _C.sub_bucket(
             edges_lhs,
             edges_rhs,
@@ -629,7 +639,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             self.shared_rel,
             num_subparts,
             num_subparts,
-            1,
+            1, # os.cpu_count() 
             config.dynamic_relations,
         )
         bucket_logger.debug(
