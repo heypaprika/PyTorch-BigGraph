@@ -49,7 +49,7 @@ def get_torchbiggraph_config():
         loss_fn="softmax",
         lr=0.1,
         regularization_coef=1e-3,
-        num_edge_chunks= 10,
+        num_edge_chunks= 32,
         # Evaluation during training
         eval_fraction=0,  # to reproduce results, we need to use all training data
         workers=1,
