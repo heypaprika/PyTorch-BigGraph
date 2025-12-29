@@ -600,7 +600,15 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         for s in gpu_schedules:
             s.append(None)
             s.append(None)
-        index_in_schedule = [0 for _ in range(self.gpu_pool.num_gpus)]
+
+        # 기존 (문제)
+
+        num_gpus = self.gpu_pool.num_gpus if self.gpu_pool is not None else torch.cuda.device_count()
+        if num_gpus < 1:
+            num_gpus = 1
+        index_in_schedule = [0 for _ in range(num_gpus)]
+
+        # index_in_schedule = [0 for _ in range(self.gpu_pool.num_gpus)]
         locked_parts = set()
 
         def schedule(gpu_idx: GPURank) -> None:
