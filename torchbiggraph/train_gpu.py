@@ -629,7 +629,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             self.shared_rel,
             num_subparts,
             num_subparts,
-            os.cpu_count(),
+            1,
             config.dynamic_relations,
         )
         bucket_logger.debug(
