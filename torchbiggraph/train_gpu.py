@@ -292,9 +292,9 @@ class GPUProcess(mp.get_context("spawn").Process):
         num_edges = subbuckets[lhs_subpart, rhs_subpart][0].shape[0]
         edge_perm = torch.randperm(num_edges)
         edges_lhs, edges_rhs, edges_rel = subbuckets[lhs_subpart, rhs_subpart]
-        _C.shuffle(edges_lhs, edge_perm, os.cpu_count())
-        _C.shuffle(edges_rhs, edge_perm, os.cpu_count())
-        _C.shuffle(edges_rel, edge_perm, os.cpu_count())
+        _C.shuffle(edges_lhs, edge_perm, 1) # os.cpu_count
+        _C.shuffle(edges_rhs, edge_perm, 1) # os.cpu_count
+        _C.shuffle(edges_rel, edge_perm, 1) # os.cpu_count
         assert edges_lhs.is_pinned()
         assert edges_rhs.is_pinned()
         assert edges_rel.is_pinned()
@@ -599,13 +599,13 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         perm_holder = {}
         rev_perm_holder = {}
         for (entity, part), embs in holder.partitioned_embeddings.items():
-            perm = _C.randperm(self.entity_counts[entity][part], os.cpu_count())
-            _C.shuffle(embs, perm, os.cpu_count())
+            perm = _C.randperm(self.entity_counts[entity][part], 1) # os.cpu_count
+            _C.shuffle(embs, perm, 1) # os.cpu_count
             optimizer = self.trainer.partitioned_optimizers[entity, part]
             (optimizer_state,) = optimizer.state.values()
-            _C.shuffle(optimizer_state["sum"], perm, os.cpu_count())
+            _C.shuffle(optimizer_state["sum"], perm, 1) # os.cpu_count
             perm_holder[entity, part] = perm
-            rev_perm = _C.reverse_permutation(perm, os.cpu_count())
+            rev_perm = _C.reverse_permutation(perm, 1) # os.cpu_count
             rev_perm_holder[entity, part] = rev_perm
 
         subpart_slices: Dict[Tuple[EntityName, Partition, SubPartition], slice] = {}
