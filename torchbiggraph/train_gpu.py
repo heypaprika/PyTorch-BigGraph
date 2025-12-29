@@ -49,7 +49,55 @@ except ImportError:
 logger = logging.getLogger("torchbiggraph")
 dist_logger = logging.LoggerAdapter(logger, {"distributed": True})
 
+from collections import deque
+import torch
 
+from collections import deque
+
+class InlineGPUProcessPool:
+    """
+    Single-GPU fallback pool that mimics GPUProcessPool API.
+    Executes work synchronously and queues results.
+    """
+    def __init__(self, worker):
+        self.worker = worker
+        self.num_gpus = 1
+        self._results = deque()
+
+    def schedule(self, gpu_idx, args):
+        stats = self.worker.do_one_job(
+            lhs_types=args.lhs_types,
+            rhs_types=args.rhs_types,
+            lhs_part=args.lhs_part,
+            rhs_part=args.rhs_part,
+            lhs_subpart=args.lhs_subpart,
+            rhs_subpart=args.rhs_subpart,
+            next_lhs_subpart=args.next_lhs_subpart,
+            next_rhs_subpart=args.next_rhs_subpart,
+            model=args.model,
+            trainer=args.trainer,
+            all_embs=args.all_embs,
+            subpart_slices=args.subpart_slices,
+            subbuckets=args.subbuckets,
+            batch_size=args.batch_size,
+            lr=args.lr,
+        )
+        # SubprocessReturn는 아래에서 정의되지만, 여기서는 "생성 시점"에만 필요하므로 런타임에서 문제 없음
+        self._results.append((gpu_idx, SubprocessReturn(gpu_idx=gpu_idx, stats=stats)))
+
+    def wait_for_next(self):
+        while not self._results:
+            pass
+        return self._results.popleft()
+
+    def close(self):
+        return
+
+    def join(self):
+        return
+
+    def terminate(self):
+        return
 class TimeKeeper:
     def __init__(self):
         self.t = self._get_time()
@@ -494,6 +542,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                 cudart = torch.cuda.cudart()
                 res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
                 torch.cuda.check_error(res)
+            self.gpu_pool = InlineGPUProcessPool(self._single_gpu_worker)
         else:
             self.gpu_pool = GPUProcessPool(
                 config.num_gpus,
@@ -600,15 +649,10 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         for s in gpu_schedules:
             s.append(None)
             s.append(None)
-
-        # 기존 (문제)
-
         num_gpus = self.gpu_pool.num_gpus if self.gpu_pool is not None else torch.cuda.device_count()
         if num_gpus < 1:
             num_gpus = 1
-        index_in_schedule = [0 for _ in range(num_gpus)]
-
-        # index_in_schedule = [0 for _ in range(self.gpu_pool.num_gpus)]
+        index_in_schedule = [0 for _ in range(num_gpus)]        
         locked_parts = set()
 
         def schedule(gpu_idx: GPURank) -> None:
@@ -656,7 +700,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                 ),
             )
 
-        for gpu_idx in range(self.gpu_pool.num_gpus):
+        for gpu_idx in range(num_gpus):
             schedule(gpu_idx)
 
         while busy_gpus:
