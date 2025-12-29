@@ -409,6 +409,16 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         if hasattr(self, "pool") and self.pool is not None:
             try:
                 logger.warning("GPU mode: closing CPU Hogwild mp pool")
+                import os, glob
+                # 1) 환경변수 기반으로 들어오는 checkpoint 경로들 후보 출력
+                for k in ["CHECKPOINT_PATH", "TBG_CHECKPOINT_PATH", "MODEL_DIR", "SM_MODEL_DIR"]:
+                    print(k, "=", os.getenv(k))
+
+                # 2) /opt/ml 아래 h5 파일 존재 여부 스캔 (SageMaker에서 매우 유용)
+                print("Scanning for .h5 under /opt/ml ...")
+                h5s = glob.glob("/opt/ml/**/*.h5", recursive=True)
+                print("found h5:", len(h5s))
+                print("sample:", h5s[:20])
                 self.pool.close()
                 self.pool.join()
             except Exception:
