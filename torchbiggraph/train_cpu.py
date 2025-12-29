@@ -5,7 +5,7 @@
 #
 # This source code is licensed under the BSD-style license found in the
 # LICENSE.txt file in the root directory of this source tree.
-import os
+
 import logging
 import math
 import time
@@ -278,10 +278,7 @@ class TrainingCoordinator:
         embedding_storage_freelist: Dict[EntityName, Set[torch.FloatStorage]] = (
             defaultdict(set)
         )
-        disable_shared_embs = os.environ.get("TBG_DISABLE_SHARED_EMB", "0") in ("1", "true", "True")
-        if disable_shared_embs:
-            logger.warning("TBG_DISABLE_SHARED_EMB=1: embedding storages will NOT use shared memory")
-
+        
         for entity_type, counts in entity_counts.items():
             max_count = max(counts)
             if holder.nparts_lhs == 1 and holder.nparts_rhs == 1:
@@ -301,27 +298,12 @@ class TrainingCoordinator:
                     )
                 )
             for _ in range(num_sides):
-                # embedding_storage_freelist[entity_type].add(
-                #     allocate_shared_tensor(
-                #         (max_count, config.entity_dimension(entity_type)),
-                #         dtype=torch.float,
-                #     ).storage()
-                # )
-                if disable_shared_embs:
-                    # Allocate a normal CPU tensor (no shared memory backing).
-                    t = torch.empty(
+                embedding_storage_freelist[entity_type].add(
+                    allocate_shared_tensor(
                         (max_count, config.entity_dimension(entity_type)),
                         dtype=torch.float,
-                        device="cpu",
-                    )
-                    embedding_storage_freelist[entity_type].add(t.storage())
-                else:
-                    embedding_storage_freelist[entity_type].add(
-                        allocate_shared_tensor(
-                            (max_count, config.entity_dimension(entity_type)),
-                            dtype=torch.float,
-                        ).storage()
-                    )
+                    ).storage()
+                )
 
         # create the handlers, threads, etc. for distributed training
         if config.num_machines > 1 or config.num_partition_servers > 0:
