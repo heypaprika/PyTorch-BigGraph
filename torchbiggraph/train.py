@@ -9,6 +9,8 @@
 import argparse
 import logging
 from typing import Callable, Optional
+import os
+import subprocess
 
 from torchbiggraph.batching import AbstractBatchProcessor
 from torchbiggraph.config import add_to_sys_path, ConfigFileLoader, ConfigSchema
@@ -45,6 +47,9 @@ def train(
 
 def main():
     setup_logging()
+    print("=== /dev/shm status ===")
+    subprocess.run(["df", "-h", "/dev/shm"], check=False)
+    print("=======================")
     config_help = "\n\nConfig parameters:\n\n" + "\n".join(ConfigSchema.help())
     parser = argparse.ArgumentParser(
         epilog=config_help,
