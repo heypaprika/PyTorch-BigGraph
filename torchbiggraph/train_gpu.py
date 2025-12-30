@@ -642,6 +642,19 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             f"[DBG] edges_rel range: {int(edges_rel.min())}..{int(edges_rel.max())} ; "
             f"num_relations={len(config.relations)}"
         )
+        # relation별 rhs 범위/카운트 검증
+
+        edges_rel_cpu = edges_rel  # CPU tensor로 가정
+        for ridx, r in enumerate(config.relations):
+            mask = (edges_rel_cpu == ridx)
+            if not bool(mask.any()):
+                continue
+            rhs_max = int(edges_rhs[mask].max())
+            rhs_cnt = self.entity_counts[r.rhs][cur_b.rhs]
+            if rhs_max >= rhs_cnt:
+                bucket_logger.error(
+                    f"[DBG][OOB] rel={ridx} rhs_type={r.rhs} rhs_max={rhs_max} rhs_cnt={rhs_cnt}"
+                )
         subbuckets = _C.sub_bucket(
             edges_lhs,
             edges_rhs,
