@@ -296,14 +296,16 @@ class GPUProcess(mp.get_context("spawn").Process):
         _C.shuffle(edges_lhs, edge_perm, 1) # os.cpu_count
         _C.shuffle(edges_rhs, edge_perm, 1) # os.cpu_count
         _C.shuffle(edges_rel, edge_perm, 1) # os.cpu_count
-        assert edges_lhs.is_pinned()
-        assert edges_rhs.is_pinned()
-        assert edges_rel.is_pinned()
+        # assert edges_lhs.is_pinned()
+        # assert edges_rhs.is_pinned()
+        # assert edges_rel.is_pinned()
+        if not edges_lhs.is_pinned() or not edges_rhs.is_pinned() or not edges_rel.is_pinned():
+            logger.warning("Edge tensors are not pinned; falling back to blocking copies.")
         gpu_edges = EdgeList(
             EntityList.from_tensor(edges_lhs),
             EntityList.from_tensor(edges_rhs),
             edges_rel,
-        ).to(self.my_device, non_blocking=True)
+        ).to(self.my_device, non_blocking=False)
         logger.debug(f"GPU #{self.gpu_idx} got {num_edges} edges")
         logger.debug(
             f"Time spent copying edges to GPU: {tk.stop('translate_edges'):.4f} s"
