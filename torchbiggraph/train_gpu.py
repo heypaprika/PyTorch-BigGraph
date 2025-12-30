@@ -233,7 +233,8 @@ class GPUProcess(mp.get_context("spawn").Process):
         tk = TimeKeeper()
 
         for embeddings in all_embs.values():
-            assert embeddings.is_pinned()
+            if not embeddings.is_pinned():
+                logger.warning("Embedding tensor is not pinned; falling back to blocking copies.")
 
         occurrences: Dict[Tuple[EntityName, Partition, SubPartition], Set[Side]] = (
             defaultdict(set)
