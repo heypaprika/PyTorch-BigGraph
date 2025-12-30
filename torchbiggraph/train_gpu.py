@@ -627,11 +627,20 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         )
         subprocess.run(["bash","-lc","df -h /dev/shm"], check=False)
 
+        lhs_counts = [self.entity_counts[r.lhs][cur_b.lhs] for r in config.relations]
+        rhs_counts = [self.entity_counts[r.rhs][cur_b.rhs] for r in config.relations]
+
         bucket_logger.warning(
-            f"[DBG] lhs range: {int(edges_lhs.min())}..{int(edges_lhs.max())} vs count {self.entity_counts[cur_b.lhs][cur_b.lhs]}"
+            f"[DBG] edges_lhs range: {int(edges_lhs.min())}..{int(edges_lhs.max())} ; "
+            f"lhs_counts(min/max)={min(lhs_counts)}..{max(lhs_counts)}"
         )
         bucket_logger.warning(
-            f"[DBG] rhs range: {int(edges_rhs.min())}..{int(edges_rhs.max())} vs count {self.entity_counts[cur_b.rhs][cur_b.rhs]}"
+            f"[DBG] edges_rhs range: {int(edges_rhs.min())}..{int(edges_rhs.max())} ; "
+            f"rhs_counts(min/max)={min(rhs_counts)}..{max(rhs_counts)}"
+        )
+        bucket_logger.warning(
+            f"[DBG] edges_rel range: {int(edges_rel.min())}..{int(edges_rel.max())} ; "
+            f"num_relations={len(config.relations)}"
         )
         subbuckets = _C.sub_bucket(
             edges_lhs,
