@@ -54,50 +54,50 @@ import torch
 
 from collections import deque
 
-class InlineGPUProcessPool:
-    """
-    Single-GPU fallback pool that mimics GPUProcessPool API.
-    Executes work synchronously and queues results.
-    """
-    def __init__(self, worker):
-        self.worker = worker
-        self.num_gpus = 1
-        self._results = deque()
+# class InlineGPUProcessPool:
+#     """
+#     Single-GPU fallback pool that mimics GPUProcessPool API.
+#     Executes work synchronously and queues results.
+#     """
+#     def __init__(self, worker):
+#         self.worker = worker
+#         self.num_gpus = 1
+#         self._results = deque()
 
-    def schedule(self, gpu_idx, args):
-        stats = self.worker.do_one_job(
-            lhs_types=args.lhs_types,
-            rhs_types=args.rhs_types,
-            lhs_part=args.lhs_part,
-            rhs_part=args.rhs_part,
-            lhs_subpart=args.lhs_subpart,
-            rhs_subpart=args.rhs_subpart,
-            next_lhs_subpart=args.next_lhs_subpart,
-            next_rhs_subpart=args.next_rhs_subpart,
-            model=args.model,
-            trainer=args.trainer,
-            all_embs=args.all_embs,
-            subpart_slices=args.subpart_slices,
-            subbuckets=args.subbuckets,
-            batch_size=args.batch_size,
-            lr=args.lr,
-        )
-        # SubprocessReturn는 아래에서 정의되지만, 여기서는 "생성 시점"에만 필요하므로 런타임에서 문제 없음
-        self._results.append((gpu_idx, SubprocessReturn(gpu_idx=gpu_idx, stats=stats)))
+#     def schedule(self, gpu_idx, args):
+#         stats = self.worker.do_one_job(
+#             lhs_types=args.lhs_types,
+#             rhs_types=args.rhs_types,
+#             lhs_part=args.lhs_part,
+#             rhs_part=args.rhs_part,
+#             lhs_subpart=args.lhs_subpart,
+#             rhs_subpart=args.rhs_subpart,
+#             next_lhs_subpart=args.next_lhs_subpart,
+#             next_rhs_subpart=args.next_rhs_subpart,
+#             model=args.model,
+#             trainer=args.trainer,
+#             all_embs=args.all_embs,
+#             subpart_slices=args.subpart_slices,
+#             subbuckets=args.subbuckets,
+#             batch_size=args.batch_size,
+#             lr=args.lr,
+#         )
+#         # SubprocessReturn는 아래에서 정의되지만, 여기서는 "생성 시점"에만 필요하므로 런타임에서 문제 없음
+#         self._results.append((gpu_idx, SubprocessReturn(gpu_idx=gpu_idx, stats=stats)))
 
-    def wait_for_next(self):
-        while not self._results:
-            pass
-        return self._results.popleft()
+#     def wait_for_next(self):
+#         while not self._results:
+#             pass
+#         return self._results.popleft()
 
-    def close(self):
-        return
+#     def close(self):
+#         return
 
-    def join(self):
-        return
+#     def join(self):
+#         return
 
-    def terminate(self):
-        return
+#     def terminate(self):
+#         return
 class TimeKeeper:
     def __init__(self):
         self.t = self._get_time()
@@ -519,41 +519,41 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         logger.info("Creating GPU workers...")
         torch.set_num_threads(1)
 
-        self._single_gpu_worker = None
+        # self._single_gpu_worker = None
         self.gpu_pool = None
 
-        if config.num_gpus == 1:
-            logger.info("Single GPU: running without GPUProcessPool")
-            # 프로세스를 시작하지 않는 GPUProcess 인스턴스 생성
-            self._single_gpu_worker = GPUProcess(
-                gpu_idx=0,
-                subprocess_init=subprocess_init,
-                embedding_storage_freelist={s for ss in self.embedding_storage_freelist.values() for s in ss}
-                | {self.shared_lhs.storage(), self.shared_rhs.storage(), self.shared_rel.storage()},
-            )
-            # 중요: run() 대신 현재 프로세스에서 필요한 초기화만 수행
-            torch.cuda.set_device(torch.device("cuda", 0))
-            if subprocess_init is not None:
-                subprocess_init()
+        # if config.num_gpus == 1:
+        #     logger.info("Single GPU: running without GPUProcessPool")
+        #     # 프로세스를 시작하지 않는 GPUProcess 인스턴스 생성
+        #     self._single_gpu_worker = GPUProcess(
+        #         gpu_idx=0,
+        #         subprocess_init=subprocess_init,
+        #         embedding_storage_freelist={s for ss in self.embedding_storage_freelist.values() for s in ss}
+        #         | {self.shared_lhs.storage(), self.shared_rhs.storage(), self.shared_rel.storage()},
+        #     )
+        #     # 중요: run() 대신 현재 프로세스에서 필요한 초기화만 수행
+        #     torch.cuda.set_device(torch.device("cuda", 0))
+        #     if subprocess_init is not None:
+        #         subprocess_init()
 
-            # 아래 pinned 등록은 subprocess에서 하던 작업인데, single process에서도 필요할 수 있음
-            for s in self._single_gpu_worker.embedding_storage_freelist:
-                assert s.is_shared()
-                cudart = torch.cuda.cudart()
-                res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
-                torch.cuda.check_error(res)
-            self.gpu_pool = InlineGPUProcessPool(self._single_gpu_worker)
-        else:
-            self.gpu_pool = GPUProcessPool(
-                config.num_gpus,
-                subprocess_init,
-                {s for ss in self.embedding_storage_freelist.values() for s in ss}
-                | {
-                    self.shared_lhs.storage(),
-                    self.shared_rhs.storage(),
-                    self.shared_rel.storage(),
-                },
-            )
+        #     # 아래 pinned 등록은 subprocess에서 하던 작업인데, single process에서도 필요할 수 있음
+        #     for s in self._single_gpu_worker.embedding_storage_freelist:
+        #         assert s.is_shared()
+        #         cudart = torch.cuda.cudart()
+        #         res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
+        #         torch.cuda.check_error(res)
+        #     self.gpu_pool = InlineGPUProcessPool(self._single_gpu_worker)
+        # else:
+        self.gpu_pool = GPUProcessPool(
+            config.num_gpus,
+            subprocess_init,
+            {s for ss in self.embedding_storage_freelist.values() for s in ss}
+            | {
+                self.shared_lhs.storage(),
+                self.shared_rhs.storage(),
+                self.shared_rel.storage(),
+            },
+        )
 
     # override
     def _coordinate_train(self, edges, eval_edge_idxs, epoch_idx) -> Stats:
@@ -709,6 +709,8 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                     lr=config.lr,
                 ),
             )
+        num_gpus = self.gpu_pool.num_gpus
+        index_in_schedule = [0 for _ in range(num_gpus)]
 
         for gpu_idx in range(num_gpus):
             schedule(gpu_idx)
@@ -728,7 +730,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             index_in_schedule[gpu_idx] += 1
             if next_bucket is None:
                 bucket_logger.debug(f"GPU #{gpu_idx} finished its schedule")
-            for gpu_idx in range(config.num_gpus):
+            for gpu_idx in range(num_gpus):
                 schedule(gpu_idx)
 
         assert len(all_stats) == num_subparts * num_subparts
@@ -743,9 +745,9 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         for (entity, part), embs in holder.partitioned_embeddings.items():
             rev_perm = rev_perm_holder[entity, part]
             optimizer = self.trainer.partitioned_optimizers[entity, part]
-            _C.shuffle(embs, rev_perm, os.cpu_count())
+            _C.shuffle(embs, rev_perm, 1) # os.cpu_count
             (state,) = optimizer.state.values()
-            _C.shuffle(state["sum"], rev_perm, os.cpu_count())
+            _C.shuffle(state["sum"], rev_perm, 1) # os.cpu_count
 
         bucket_logger.debug(
             f"Time spent mapping embeddings back from sub-buckets: {tk.stop('rev_perm'):.4f} s"
