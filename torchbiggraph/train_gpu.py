@@ -626,6 +626,13 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             f"[DBG] shared_lhs={self.shared_lhs.shape} shared_rhs={self.shared_rhs.shape} shared_rel={self.shared_rel.shape}"
         )
         subprocess.run(["bash","-lc","df -h /dev/shm"], check=False)
+
+        bucket_logger.warning(
+            f"[DBG] lhs range: {int(edges_lhs.min())}..{int(edges_lhs.max())} vs count {self.entity_counts[cur_b.lhs][cur_b.lhs]}"
+        )
+        bucket_logger.warning(
+            f"[DBG] rhs range: {int(edges_rhs.min())}..{int(edges_rhs.max())} vs count {self.entity_counts[cur_b.rhs][cur_b.rhs]}"
+        )
         subbuckets = _C.sub_bucket(
             edges_lhs,
             edges_rhs,

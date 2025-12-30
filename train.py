@@ -1,10 +1,16 @@
 # train.py
 
 import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import sys
 from torchbiggraph.config import parse_config
 from torchbiggraph.train import main as train_main
 import torch, torchbiggraph
+torch.set_num_threads(1)
 from torchbiggraph import _C
 
 print("PYTHON:", __import__("sys").version)
