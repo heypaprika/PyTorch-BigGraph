@@ -278,7 +278,6 @@ class TrainingCoordinator:
         embedding_storage_freelist: Dict[EntityName, Set[torch.FloatStorage]] = (
             defaultdict(set)
         )
-        
         for entity_type, counts in entity_counts.items():
             max_count = max(counts)
             if holder.nparts_lhs == 1 and holder.nparts_rhs == 1:

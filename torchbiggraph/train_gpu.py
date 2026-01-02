@@ -49,55 +49,7 @@ except ImportError:
 logger = logging.getLogger("torchbiggraph")
 dist_logger = logging.LoggerAdapter(logger, {"distributed": True})
 
-from collections import deque
-import torch
 
-from collections import deque
-
-# class InlineGPUProcessPool:
-#     """
-#     Single-GPU fallback pool that mimics GPUProcessPool API.
-#     Executes work synchronously and queues results.
-#     """
-#     def __init__(self, worker):
-#         self.worker = worker
-#         self.num_gpus = 1
-#         self._results = deque()
-
-#     def schedule(self, gpu_idx, args):
-#         stats = self.worker.do_one_job(
-#             lhs_types=args.lhs_types,
-#             rhs_types=args.rhs_types,
-#             lhs_part=args.lhs_part,
-#             rhs_part=args.rhs_part,
-#             lhs_subpart=args.lhs_subpart,
-#             rhs_subpart=args.rhs_subpart,
-#             next_lhs_subpart=args.next_lhs_subpart,
-#             next_rhs_subpart=args.next_rhs_subpart,
-#             model=args.model,
-#             trainer=args.trainer,
-#             all_embs=args.all_embs,
-#             subpart_slices=args.subpart_slices,
-#             subbuckets=args.subbuckets,
-#             batch_size=args.batch_size,
-#             lr=args.lr,
-#         )
-#         # SubprocessReturn는 아래에서 정의되지만, 여기서는 "생성 시점"에만 필요하므로 런타임에서 문제 없음
-#         self._results.append((gpu_idx, SubprocessReturn(gpu_idx=gpu_idx, stats=stats)))
-
-#     def wait_for_next(self):
-#         while not self._results:
-#             pass
-#         return self._results.popleft()
-
-#     def close(self):
-#         return
-
-#     def join(self):
-#         return
-
-#     def terminate(self):
-#         return
 class TimeKeeper:
     def __init__(self):
         self.t = self._get_time()
@@ -175,12 +127,12 @@ class GPUProcess(mp.get_context("spawn").Process):
             self.subprocess_init()
         self.master_endpoint.close()
 
-        # for s in self.embedding_storage_freelist:
-            # assert s.is_shared()
-            # cudart = torch.cuda.cudart()
-            # res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
-            # torch.cuda.check_error(res)
-            # assert s.is_pinned()
+        for s in self.embedding_storage_freelist:
+            assert s.is_shared()
+            cudart = torch.cuda.cudart()
+            res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
+            torch.cuda.check_error(res)
+            assert s.is_pinned()
         logger.info(f"GPU subprocess {self.gpu_idx} up and running")
         while True:
             try:
@@ -233,8 +185,7 @@ class GPUProcess(mp.get_context("spawn").Process):
         tk = TimeKeeper()
 
         for embeddings in all_embs.values():
-            if not embeddings.is_pinned():
-                logger.warning("Embedding tensor is not pinned; falling back to blocking copies.")
+            assert embeddings.is_pinned()
 
         occurrences: Dict[Tuple[EntityName, Partition, SubPartition], Set[Side]] = (
             defaultdict(set)
@@ -293,19 +244,17 @@ class GPUProcess(mp.get_context("spawn").Process):
         num_edges = subbuckets[lhs_subpart, rhs_subpart][0].shape[0]
         edge_perm = torch.randperm(num_edges)
         edges_lhs, edges_rhs, edges_rel = subbuckets[lhs_subpart, rhs_subpart]
-        _C.shuffle(edges_lhs, edge_perm, 1) # os.cpu_count
-        _C.shuffle(edges_rhs, edge_perm, 1) # os.cpu_count
-        _C.shuffle(edges_rel, edge_perm, 1) # os.cpu_count
-        # assert edges_lhs.is_pinned()
-        # assert edges_rhs.is_pinned()
-        # assert edges_rel.is_pinned()
-        if not edges_lhs.is_pinned() or not edges_rhs.is_pinned() or not edges_rel.is_pinned():
-            logger.warning("Edge tensors are not pinned; falling back to blocking copies.")
+        _C.shuffle(edges_lhs, edge_perm, os.cpu_count())
+        _C.shuffle(edges_rhs, edge_perm, os.cpu_count())
+        _C.shuffle(edges_rel, edge_perm, os.cpu_count())
+        assert edges_lhs.is_pinned()
+        assert edges_rhs.is_pinned()
+        assert edges_rel.is_pinned()
         gpu_edges = EdgeList(
             EntityList.from_tensor(edges_lhs),
             EntityList.from_tensor(edges_rhs),
             edges_rel,
-        ).to(self.my_device, non_blocking=False)
+        ).to(self.my_device, non_blocking=True)
         logger.debug(f"GPU #{self.gpu_idx} got {num_edges} edges")
         logger.debug(
             f"Time spent copying edges to GPU: {tk.stop('translate_edges'):.4f} s"
@@ -457,33 +406,6 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             config, model, trainer, evaluator, rank, subprocess_init, stats_handler
         )
 
-        if hasattr(self, "pool") and self.pool is not None:
-            try:
-                logger.warning("GPU mode: closing CPU Hogwild mp pool")
-                import os, glob
-                # 1) 환경변수 기반으로 들어오는 checkpoint 경로들 후보 출력
-                for k in ["CHECKPOINT_PATH", "TBG_CHECKPOINT_PATH", "MODEL_DIR", "SM_MODEL_DIR"]:
-                    print(k, "=", os.getenv(k))
-
-                # 2) /opt/ml 아래 h5 파일 존재 여부 스캔 (SageMaker에서 매우 유용)
-                print("Scanning for .h5 under /opt/ml ...")
-                h5s = glob.glob("/opt/ml/**/*.h5", recursive=True)
-                print("found h5:", len(h5s))
-                print("sample:", h5s[:20])
-                self.pool.close()
-                self.pool.join()
-            except Exception:
-                logger.exception("GPU mode: failed to close CPU pool cleanly")
-            finally:
-                self.pool = None
-        if os.environ.get("TBG_DISABLE_CHECKPOINT_READ", "0") in ("1", "true", "True"):
-            logger.warning("GPU mode: disabling checkpoint reads (forcing fresh init)")
-            # Strict=False ensures maybe_read path can fall back to init if read fails.
-            self.strict = False
-            # Prevent loading from init_path as well (optional).
-            self.loadpath_manager = None
-
-
         assert config.num_gpus > 0
         if not CPP_INSTALLED:
             raise RuntimeError(
@@ -519,34 +441,10 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         self.shared_rhs.share_memory_()
         self.shared_rel.share_memory_()
 
+        # fork early for HOGWILD threads
         logger.info("Creating GPU workers...")
         torch.set_num_threads(1)
-
-        # self._single_gpu_worker = None
-        self.gpu_pool = None
-
-        # if config.num_gpus == 1:
-        #     logger.info("Single GPU: running without GPUProcessPool")
-        #     # 프로세스를 시작하지 않는 GPUProcess 인스턴스 생성
-        #     self._single_gpu_worker = GPUProcess(
-        #         gpu_idx=0,
-        #         subprocess_init=subprocess_init,
-        #         embedding_storage_freelist={s for ss in self.embedding_storage_freelist.values() for s in ss}
-        #         | {self.shared_lhs.storage(), self.shared_rhs.storage(), self.shared_rel.storage()},
-        #     )
-        #     # 중요: run() 대신 현재 프로세스에서 필요한 초기화만 수행
-        #     torch.cuda.set_device(torch.device("cuda", 0))
-        #     if subprocess_init is not None:
-        #         subprocess_init()
-
-        #     # 아래 pinned 등록은 subprocess에서 하던 작업인데, single process에서도 필요할 수 있음
-        #     for s in self._single_gpu_worker.embedding_storage_freelist:
-        #         assert s.is_shared()
-        #         cudart = torch.cuda.cudart()
-        #         res = cudart.cudaHostRegister(s.data_ptr(), s.size() * s.element_size(), 0)
-        #         torch.cuda.check_error(res)
-        #     self.gpu_pool = InlineGPUProcessPool(self._single_gpu_worker)
-        # else:
+        
         self.gpu_pool = GPUProcessPool(
             config.num_gpus,
             subprocess_init,
@@ -602,13 +500,13 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         perm_holder = {}
         rev_perm_holder = {}
         for (entity, part), embs in holder.partitioned_embeddings.items():
-            perm = _C.randperm(self.entity_counts[entity][part], 1) # os.cpu_count
-            _C.shuffle(embs, perm, 1) # os.cpu_count
+            perm = _C.randperm(self.entity_counts[entity][part], os.cpu_count())
+            _C.shuffle(embs, perm, os.cpu_count())
             optimizer = self.trainer.partitioned_optimizers[entity, part]
             (optimizer_state,) = optimizer.state.values()
-            _C.shuffle(optimizer_state["sum"], perm, 1) # os.cpu_count
+            _C.shuffle(optimizer_state["sum"], perm, os.cpu_count())
             perm_holder[entity, part] = perm
-            rev_perm = _C.reverse_permutation(perm, 1) # os.cpu_count
+            rev_perm = _C.reverse_permutation(perm, os.cpu_count())
             rev_perm_holder[entity, part] = rev_perm
 
         subpart_slices: Dict[Tuple[EntityName, Partition, SubPartition], slice] = {}
@@ -618,46 +516,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                 split_almost_equally(num_entities, num_parts=num_subparts)
             ):
                 subpart_slices[entity_name, part, subpart] = subpart_slice
-        import subprocess
-        bucket_logger.warning(
-            f"[DBG] edges_lhs={edges_lhs.shape} {edges_lhs.dtype} pinned={edges_lhs.is_pinned()} "
-            f"edges_rhs={edges_rhs.shape} pinned={edges_rhs.is_pinned()} "
-            f"edges_rel={edges_rel.shape} pinned={edges_rel.is_pinned()} "
-            f"num_subparts={num_subparts}"
-        )
-        bucket_logger.warning(
-            f"[DBG] shared_lhs={self.shared_lhs.shape} shared_rhs={self.shared_rhs.shape} shared_rel={self.shared_rel.shape}"
-        )
-        subprocess.run(["bash","-lc","df -h /dev/shm"], check=False)
 
-        lhs_counts = [self.entity_counts[r.lhs][cur_b.lhs] for r in config.relations]
-        rhs_counts = [self.entity_counts[r.rhs][cur_b.rhs] for r in config.relations]
-
-        bucket_logger.warning(
-            f"[DBG] edges_lhs range: {int(edges_lhs.min())}..{int(edges_lhs.max())} ; "
-            f"lhs_counts(min/max)={min(lhs_counts)}..{max(lhs_counts)}"
-        )
-        bucket_logger.warning(
-            f"[DBG] edges_rhs range: {int(edges_rhs.min())}..{int(edges_rhs.max())} ; "
-            f"rhs_counts(min/max)={min(rhs_counts)}..{max(rhs_counts)}"
-        )
-        bucket_logger.warning(
-            f"[DBG] edges_rel range: {int(edges_rel.min())}..{int(edges_rel.max())} ; "
-            f"num_relations={len(config.relations)}"
-        )
-        # relation별 rhs 범위/카운트 검증
-
-        edges_rel_cpu = edges_rel  # CPU tensor로 가정
-        for ridx, r in enumerate(config.relations):
-            mask = (edges_rel_cpu == ridx)
-            if not bool(mask.any()):
-                continue
-            rhs_max = int(edges_rhs[mask].max())
-            rhs_cnt = self.entity_counts[r.rhs][cur_b.rhs]
-            if rhs_max >= rhs_cnt:
-                bucket_logger.error(
-                    f"[DBG][OOB] rel={ridx} rhs_type={r.rhs} rhs_max={rhs_max} rhs_cnt={rhs_cnt}"
-                )
         subbuckets = _C.sub_bucket(
             edges_lhs,
             edges_rhs,
@@ -671,7 +530,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             self.shared_rel,
             num_subparts,
             num_subparts,
-            1, # os.cpu_count() 
+            os.cpu_count(),
             config.dynamic_relations,
         )
         bucket_logger.debug(
@@ -691,10 +550,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         for s in gpu_schedules:
             s.append(None)
             s.append(None)
-        num_gpus = self.gpu_pool.num_gpus if self.gpu_pool is not None else torch.cuda.device_count()
-        if num_gpus < 1:
-            num_gpus = 1
-        index_in_schedule = [0 for _ in range(num_gpus)]        
+        index_in_schedule = [0 for _ in range(self.gpu_pool.num_gpus)]
         locked_parts = set()
 
         def schedule(gpu_idx: GPURank) -> None:
@@ -741,10 +597,8 @@ class GPUTrainingCoordinator(TrainingCoordinator):
                     lr=config.lr,
                 ),
             )
-        num_gpus = self.gpu_pool.num_gpus
-        index_in_schedule = [0 for _ in range(num_gpus)]
 
-        for gpu_idx in range(num_gpus):
+        for gpu_idx in range(self.gpu_pool.num_gpus):
             schedule(gpu_idx)
 
         while busy_gpus:
@@ -762,7 +616,7 @@ class GPUTrainingCoordinator(TrainingCoordinator):
             index_in_schedule[gpu_idx] += 1
             if next_bucket is None:
                 bucket_logger.debug(f"GPU #{gpu_idx} finished its schedule")
-            for gpu_idx in range(num_gpus):
+            for gpu_idx in range(config.num_gpus):
                 schedule(gpu_idx)
 
         assert len(all_stats) == num_subparts * num_subparts
@@ -777,9 +631,9 @@ class GPUTrainingCoordinator(TrainingCoordinator):
         for (entity, part), embs in holder.partitioned_embeddings.items():
             rev_perm = rev_perm_holder[entity, part]
             optimizer = self.trainer.partitioned_optimizers[entity, part]
-            _C.shuffle(embs, rev_perm, 1) # os.cpu_count
+            _C.shuffle(embs, rev_perm, os.cpu_count())
             (state,) = optimizer.state.values()
-            _C.shuffle(state["sum"], rev_perm, 1) # os.cpu_count
+            _C.shuffle(state["sum"], rev_perm, os.cpu_count())
 
         bucket_logger.debug(
             f"Time spent mapping embeddings back from sub-buckets: {tk.stop('rev_perm'):.4f} s"
