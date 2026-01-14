@@ -1,0 +1,16 @@
+FROM pytorch/pytorch:1.13.0-cuda11.6-cudnn8-devel
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+COPY ./ ./
+
+RUN PBG_INSTALL_CPP=1 pip install -e .
+RUN pip install runpod
+
+# 서버리스는 보통 학습(train.py) 대신 handler를 실행합니다.
+CMD ["python3", "-u", "handler.py"]
