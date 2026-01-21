@@ -13,11 +13,11 @@ def get_torchbiggraph_config():
     base_out = os.environ.get("PBG_OUTPUT_DIR", "/workspace/output")
 
     config = dict(  # noqa
-        entity_path=os.path.join(base_in, "train"),
+        entity_path=base_in,
         edge_paths=[
-            os.path.join(base_in, "train", "edge-train_partitioned"),
-            os.path.join(base_in, "train", "edge-valid_partitioned"),
-            os.path.join(base_in, "train", "edge-test_partitioned"),
+            os.path.join(base_in, "edge-train_partitioned"),
+            os.path.join(base_in, "edge-valid_partitioned"),
+            os.path.join(base_in, "edge-test_partitioned"),
         ],
         checkpoint_path=base_out,
 
